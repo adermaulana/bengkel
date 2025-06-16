@@ -550,13 +550,31 @@ if (isset($_GET['hal']) == 'hapus') {
             <!-- /.content-header -->
 
             <!-- Main content -->
-            <section class="content">
+                <section class="content">
                 <div class="container-fluid">
                     <div class="row">
                         <div class="col-12">
                             <div class="card">
                                 <!-- /.card-header -->
                                 <div class="card-body">
+                                    <div class="card-body">
+                                    <?php if (isset($_SESSION['error'])): ?>
+                                        <div class="alert alert-danger alert-dismissible">
+                                            <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                                            <h5><i class="icon fas fa-ban"></i> Error!</h5>
+                                            <?= $_SESSION['error'] ?>
+                                        </div>
+                                        <?php unset($_SESSION['error']); ?>
+                                    <?php endif; ?>
+
+                                    <?php if (isset($_SESSION['success'])): ?>
+                                        <div class="alert alert-success alert-dismissible">
+                                            <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                                            <h5><i class="icon fas fa-check"></i> Success!</h5>
+                                            <?= $_SESSION['success'] ?>
+                                        </div>
+                                        <?php unset($_SESSION['success']); ?>
+                                    <?php endif; ?>
                                     <table id="example1" class="table table-bordered table-striped">
                                         <thead>
                                             <tr>
@@ -565,6 +583,7 @@ if (isset($_GET['hal']) == 'hapus') {
                                                 <th>NIK</th>
                                                 <th>Nama Pelanggan</th>
                                                 <th>Tanggal Booking</th>
+                                                <th>Total Harga</th>
                                                 <th>Status</th>
                                                 <th>Aksi</th>
                                             </tr>
@@ -577,23 +596,126 @@ if (isset($_GET['hal']) == 'hapus') {
                                                                             JOIN pelanggan_221032 p ON b.nik_221032 = p.nik_221032
                                                                             ORDER BY b.tanggal_booking_221032 DESC");
                                             while($data = mysqli_fetch_array($tampil)):
+                                                
+                                                // Calculate total price for each booking
+                                                $total_harga = 0;
+                                                $query_layanan = mysqli_query($koneksi, "SELECT dl.*, l.harga_layanan_221032 
+                                                                                        FROM detail_layanan_221032 dl
+                                                                                        JOIN layanan_221032 l ON dl.kode_layanan_221032 = l.kode_layanan_221032
+                                                                                        WHERE dl.kode_booking_221032 = '".$data['kode_booking_221032']."'");
+                                                while($layanan = mysqli_fetch_array($query_layanan)) {
+                                                    $total_harga += $layanan['harga_layanan_221032'];
+                                                }
                                             ?>
                                             <tr>
                                                 <td><?= $no++ ?></td>
                                                 <td><?= $data['kode_booking_221032'] ?></td>
                                                 <td><?= $data['nik_221032'] ?></td>
                                                 <td><?= $data['nama_221032'] ?></td>
-                                                <td><?= $data['tanggal_booking_221032'] ?></td>
+                                                <td><?= date('d-m-Y', strtotime($data['tanggal_booking_221032'])) ?></td>
+                                                <td>Rp <?= number_format($total_harga, 0, ',', '.') ?></td>
                                                 <?php if ($data['status_221032'] == 'dikonfirmasi'): ?>
                                                 <td><span class="badge bg-success"><?= $data['status_221032'] ?></span></td>
                                                 <?php else: ?>
                                                 <td><span class="badge bg-warning"><?= $data['status_221032'] ?></span></td>
                                                 <?php endif; ?>
                                                 <td>
-                                                    <a class="btn btn-danger"
-                                                        onclick="return confirm('Apakah Anda Yakin Ingin Menghapus Data?')"
-                                                        href="booking.php?hal=hapus&id=<?= $data['kode_booking_221032'] ?>">Hapus</a>
-                                                </td>
+                                                    <?php if ($data['status_221032'] == 'Pending' || $data['status_221032'] == 'pending'): ?>
+                                                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#uploadModal<?= $data['kode_booking_221032'] ?>">
+                                                        Upload Bukti
+                                                    </button>
+                                                    <!-- Modal Upload Bukti Pembayaran -->
+                                                    <div class="modal fade" id="uploadModal<?= $data['kode_booking_221032'] ?>" tabindex="-1" role="dialog" aria-labelledby="uploadModalLabel" aria-hidden="true">
+                                                        <div class="modal-dialog" role="document">
+                                                            <div class="modal-content">
+                                                                <div class="modal-header">
+                                                                    <h5 class="modal-title" id="uploadModalLabel">Upload Bukti Pembayaran</h5>
+                                                                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                                        <span aria-hidden="true">&times;</span>
+                                                                    </button>
+                                                                </div>
+                                                                <form action="proses_upload_bukti.php" method="post" enctype="multipart/form-data">
+                                                                    <div class="modal-body">
+                                                                        <input type="hidden" name="kode_booking" value="<?= $data['kode_booking_221032'] ?>">
+                                                                        
+                                                                        <div class="form-group">
+                                                                            <label>Metode Pembayaran</label>
+                                                                            <select name="metode_pembayaran" class="form-control" required>
+                                                                                <option value="">Pilih Metode</option>
+                                                                                <option value="Transfer Bank">Transfer Bank</option>
+                                                                                <option value="E-Wallet">E-Wallet</option>
+                                                                                <option value="Tunai">Tunai</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        
+                                                                        <div class="form-group">
+                                                                            <label>Bukti Pembayaran</label>
+                                                                            <input type="file" name="bukti_pembayaran" class="form-control" required accept="image/*">
+                                                                            <small class="text-muted">Format: JPG, PNG (Max 2MB)</small>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="modal-footer">
+                                                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
+                                                                        <button type="submit" class="btn btn-primary">Upload</button>
+                                                                    </div>
+                                                                </form>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                      <?php else: ?>
+                                                      <?php 
+                                                      // Cek apakah sudah ada data pembayaran untuk booking ini
+                                                      $cek_pembayaran = mysqli_query($koneksi, "SELECT * FROM pembayaran_221032 WHERE kode_booking_221032 = '".$data['kode_booking_221032']."'");
+                                                      $data_pembayaran = mysqli_fetch_assoc($cek_pembayaran);
+                                                      
+                                                      if ($data_pembayaran): ?>
+                                                          <!-- Jika sudah upload bukti -->
+                                                          <button type="button" class="btn btn-info btn-sm" data-toggle="modal" data-target="#lihatBuktiModal<?= $data['kode_booking_221032'] ?>">
+                                                              Lihat Bukti
+                                                          </button>
+                                                          
+                                                          <!-- Modal Lihat Bukti Pembayaran -->
+                                                          <div class="modal fade" id="lihatBuktiModal<?= $data['kode_booking_221032'] ?>" tabindex="-1" role="dialog" aria-labelledby="lihatBuktiModalLabel">
+                                                              <div class="modal-dialog modal-lg" role="document">
+                                                                  <div class="modal-content">
+                                                                      <div class="modal-header">
+                                                                          <h5 class="modal-title" id="lihatBuktiModalLabel">Bukti Pembayaran #<?= $data['kode_booking_221032'] ?></h5>
+                                                                          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                                              <span aria-hidden="true">&times;</span>
+                                                                          </button>
+                                                                      </div>
+                                                                      <div class="modal-body text-center">
+                                                                          <img src="../pelanggan/<?= $data_pembayaran['bukti_pembayaran_221032'] ?>" class="img-fluid" alt="Bukti Pembayaran">
+                                                                          <div class="mt-3">
+                                                                              <p><strong>Metode Pembayaran:</strong> <?= $data_pembayaran['metode_pembayaran_221032'] ?></p>
+                                                                              <p><strong>Status:</strong> 
+                                                                                  <span class="badge 
+                                                                                      <?= $data_pembayaran['status_pembayaran_221032'] == 'diterima' ? 'bg-success' : 
+                                                                                      ($data_pembayaran['status_pembayaran_221032'] == 'ditolak' ? 'bg-danger' : 'bg-warning') ?>">
+                                                                                      <?= $data_pembayaran['status_pembayaran_221032'] ?>
+                                                                                  </span>
+                                                                              </p>
+                                                                          </div>
+                                                                      </div>
+                                                                      <div class="modal-footer">
+                                                                          <?php if ($data_pembayaran['status_pembayaran_221032'] == 'menunggu verifikasi'): ?>
+                                                                          <div class="btn-group">
+                                                                              <button type="button" class="btn btn-success" onclick="konfirmasiPembayaran('<?= $data['kode_booking_221032'] ?>', 'diterima')">
+                                                                                  Terima
+                                                                              </button>
+                                                                              <button type="button" class="btn btn-danger" onclick="konfirmasiPembayaran('<?= $data['kode_booking_221032'] ?>', 'ditolak')">
+                                                                                  Tolak
+                                                                              </button>
+                                                                          </div>
+                                                                          <?php endif; ?>
+                                                                          <button type="button" class="btn btn-secondary" data-dismiss="modal">Tutup</button>
+                                                                      </div>
+                                                                  </div>
+                                                              </div>
+                                                          </div>
+                                                      <?php endif; ?>
+                                                  <?php endif; ?>
+                                              </td>
                                             </tr>
                                             <?php endwhile; ?>
                                         </tbody>
@@ -604,6 +726,7 @@ if (isset($_GET['hal']) == 'hapus') {
                                                 <th>NIK</th>
                                                 <th>Nama Pelanggan</th>
                                                 <th>Tanggal Booking</th>
+                                                <th>Total Harga</th>
                                                 <th>Status</th>
                                                 <th>Aksi</th>
                                             </tr>
@@ -704,6 +827,28 @@ if (isset($_GET['hal']) == 'hapus') {
             });
         });
     </script>
+
+<script>
+function konfirmasiPembayaran(kode_booking, status) {
+    if (confirm('Apakah Anda yakin ingin ' + (status == 'diterima' ? 'menerima' : 'menolak') + ' pembayaran ini?')) {
+        $.ajax({
+            url: 'proses_konfirmasi_pembayaran.php',
+            type: 'POST',
+            data: {
+                kode_booking: kode_booking,
+                status: status
+            },
+            success: function(response) {
+                location.reload();
+            },
+            error: function() {
+                alert('Terjadi kesalahan saat memproses permintaan');
+            }
+        });
+    }
+}
+</script>
+
 </body>
 
 </html>

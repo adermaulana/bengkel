@@ -10,6 +10,7 @@ if($_SESSION['status'] != 'login' || !isset($_SESSION['username_pelanggan'])){
 
 }
 
+
 ?>
 
 <!DOCTYPE html>
@@ -154,7 +155,7 @@ if($_SESSION['status'] != 'login' || !isset($_SESSION['username_pelanggan'])){
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-            <h1 class="m-0">Dashboard</h1>
+            <h1 class="m-0">Daftar Service</h1>
           </div><!-- /.col -->
           <div class="col-sm-6">
 
@@ -166,59 +167,75 @@ if($_SESSION['status'] != 'login' || !isset($_SESSION['username_pelanggan'])){
 
     <!-- Main content -->
     <section class="content">
-      <div class="container-fluid">
-        <!-- Small boxes (Stat box) -->
-        <div class="row">
-          <div class="col-lg-4 col-6">
-            <!-- small box -->
-            <div class="small-box bg-info">
-              <div class="inner">
-                <h3>150</h3>
-
-                <p>Jumlah Pelanggan</p>
-              </div>
-              <div class="icon">
-                <i class="ion ion-bag"></i>
-              </div>
-              <a href="#" class="small-box-footer"><i class="fas fa-arrow-circle-right"></i></a>
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <!-- /.card-header -->
+                        <div class="card-body">
+                            <div class="card-body">
+                            <table id="example1" class="table table-bordered table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>No</th>
+                                        <th>Kode Booking</th>
+                                        <th>NIK</th>
+                                        <th>Nama Pelanggan</th>
+                                        <th>Tanggal Booking</th>
+                                        <th>Status</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    $no = 1;
+                                    $nik_pelanggan = $_SESSION['nik_pelanggan'];
+                                    $tampil = mysqli_query($koneksi, "SELECT b.*, p.nama_221032 
+                                                                    FROM booking_221032 b
+                                                                    JOIN pelanggan_221032 p ON b.nik_221032 = p.nik_221032
+                                                                    WHERE b.nik_221032 = '$nik_pelanggan'
+                                                                    ORDER BY b.tanggal_booking_221032 DESC");
+                                    while($data = mysqli_fetch_array($tampil)):
+                                    ?>
+                                    <tr>
+                                        <td><?= $no++ ?></td>
+                                        <td><?= $data['kode_booking_221032'] ?></td>
+                                        <td><?= $data['nik_221032'] ?></td>
+                                        <td><?= $data['nama_221032'] ?></td>
+                                        <td><?= date('d-m-Y', strtotime($data['tanggal_booking_221032'])) ?></td>
+                                        <?php if ($data['status_221032'] == 'dikonfirmasi'): ?>
+                                        <td><span class="badge bg-success"><?= $data['status_221032'] ?></span></td>
+                                        <?php else: ?>
+                                        <td><span class="badge bg-warning"><?= $data['status_221032'] ?></span></td>
+                                        <?php endif; ?>
+                                        <td>
+                                        <a class="btn btn-info" href="detail_service.php?id=<?= $data['kode_booking_221032'] ?>">Detail</a>
+                                        </td>
+                                    </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th>No</th>
+                                        <th>Kode Booking</th>
+                                        <th>NIK</th>
+                                        <th>Nama Pelanggan</th>
+                                        <th>Tanggal Booking</th>
+                                        <th>Status</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        <!-- /.card-body -->
+                    </div>
+                    <!-- /.card -->
+                </div>
+                <!-- /.col -->
             </div>
-          </div>
-          <!-- ./col -->
-          <div class="col-lg-4 col-6">
-            <!-- small box -->
-            <div class="small-box bg-success">
-              <div class="inner">
-                <h3>Rp. 5000000</h3>
-
-                <p>Pemasukan</p>
-              </div>
-              <div class="icon">
-                <i class="ion ion-stats-bars"></i>
-              </div>
-              <a href="#" class="small-box-footer"><i class="fas fa-arrow-circle-right"></i></a>
-            </div>
-          </div>
-          <!-- ./col -->
-          <div class="col-lg-4 col-6">
-            <!-- small box -->
-            <div class="small-box bg-warning">
-              <div class="inner">
-                <h3>8000</h3>
-
-                <p>Total Pesanan</p>
-              </div>
-              <div class="icon">
-                <i class="ion ion-person-add"></i>
-              </div>
-              <a href="#" class="small-box-footer"><i class="fas fa-arrow-circle-right"></i></a>
-            </div>
-          </div>
+            <!-- /.row -->
         </div>
-        <!-- /.row -->
-        <!-- Main row -->
-
-        <!-- /.row (main row) -->
-      </div><!-- /.container-fluid -->
+        <!-- /.container-fluid -->
     </section>
     <!-- /.content -->
   </div>

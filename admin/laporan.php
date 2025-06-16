@@ -3,12 +3,158 @@ include '../koneksi.php';
 
 session_start();
 
-if ($_SESSION['status'] != 'login') {
-    session_unset();
-    session_destroy();
-    header('location:../');
+if ($_SESSION['status'] != 'login' || !isset($_SESSION['username_admin'])) {
+    header('location:../pelanggan');
+}
+// Proses filter jika form disubmit
+$filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
+$start_date = isset($_GET['start_date']) ? $_GET['start_date'] : '';
+$end_date = isset($_GET['end_date']) ? $_GET['end_date'] : '';
+
+// Query dasar
+$query = "SELECT b.*, p.nama_221032 
+          FROM booking_221032 b
+          JOIN pelanggan_221032 p ON b.nik_221032 = p.nik_221032";
+
+// Tambahkan kondisi berdasarkan filter
+switch ($filter) {
+    case 'week':
+        $query .= " WHERE YEARWEEK(b.tanggal_booking_221032, 1) = YEARWEEK(CURDATE(), 1)";
+        break;
+    case 'month':
+        $query .= " WHERE MONTH(b.tanggal_booking_221032) = MONTH(CURDATE()) 
+                   AND YEAR(b.tanggal_booking_221032) = YEAR(CURDATE())";
+        break;
+    case 'year':
+        $query .= " WHERE YEAR(b.tanggal_booking_221032) = YEAR(CURDATE())";
+        break;
+    case 'custom':
+        if (!empty($start_date) && !empty($end_date)) {
+            $query .= " WHERE b.tanggal_booking_221032 BETWEEN '$start_date' AND '$end_date'";
+        }
+        break;
+    default:
+        // Semua data
+        break;
 }
 
+$query .= " ORDER BY b.tanggal_booking_221032 DESC";
+
+
+function generatePDF($data, $filter, $koneksi, $start_date = null, $end_date = null) {
+    require_once('../tcpdf/tcpdf.php');
+    
+    // Buat instance TCPDF
+    $pdf = new TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+    
+    // Set dokumen informasi
+    $pdf->SetCreator(PDF_CREATOR);
+    $pdf->SetAuthor('Admin Bengkel');
+    $pdf->SetTitle('Laporan Booking Bengkel');
+    $pdf->SetSubject('Laporan Booking');
+    
+    // Set margin
+    $pdf->SetMargins(PDF_MARGIN_LEFT, PDF_MARGIN_TOP, PDF_MARGIN_RIGHT);
+    $pdf->SetHeaderMargin(PDF_MARGIN_HEADER);
+    $pdf->SetFooterMargin(PDF_MARGIN_FOOTER);
+    
+    // Set auto page breaks
+    $pdf->SetAutoPageBreak(TRUE, PDF_MARGIN_BOTTOM);
+    
+    // Add a page
+    $pdf->AddPage();
+    
+    // Set judul laporan
+    $title = 'LAPORAN DATA BOOKING BENGKEL';
+    
+    // Tambahkan informasi periode berdasarkan filter
+    $period_info = '';
+    switch ($filter) {
+        case 'week':
+            $period_info = 'Periode: Minggu Ini';
+            break;
+        case 'month':
+            $period_info = 'Periode: Bulan Ini (' . date('F Y') . ')';
+            break;
+        case 'year':
+            $period_info = 'Periode: Tahun Ini (' . date('Y') . ')';
+            break;
+        case 'custom':
+            if ($start_date && $end_date) {
+                $period_info = 'Periode: ' . date('d/m/Y', strtotime($start_date)) . ' - ' . date('d/m/Y', strtotime($end_date));
+            }
+            break;
+        default:
+            $period_info = 'Semua Data';
+    }
+    
+    // Konten HTML untuk PDF
+    $html = '
+    <h1 style="text-align:center;">' . $title . '</h1>
+    <p style="text-align:center;">' . $period_info . '</p>
+    <p style="text-align:center;">Dicetak pada: ' . date('d/m/Y H:i:s') . '</p>
+    <table border="1" cellpadding="4">
+        <tr>
+            <th width="5%"><b>No</b></th>
+            <th width="15%"><b>Kode Booking</b></th>
+            <th width="15%"><b>NIK</b></th>
+            <th width="20%"><b>Nama Pelanggan</b></th>
+            <th width="15%"><b>Tanggal Booking</b></th>
+            <th width="15%"><b>Total Harga</b></th>
+            <th width="15%"><b>Status</b></th>
+        </tr>';
+    
+      $no = 1;
+      $total_keseluruhan = 0;
+      foreach ($data as $row) {
+        // Calculate total price for each booking in the PDF
+        $total_harga = 0;
+        $query_layanan = mysqli_query($koneksi, "SELECT dl.*, l.harga_layanan_221032 
+                                              FROM detail_layanan_221032 dl
+                                              JOIN layanan_221032 l ON dl.kode_layanan_221032 = l.kode_layanan_221032
+                                              WHERE dl.kode_booking_221032 = '".$row['kode_booking_221032']."'");
+        while($layanan = mysqli_fetch_array($query_layanan)) {
+            $total_harga += $layanan['harga_layanan_221032'];
+        }
+        $total_keseluruhan += $total_harga;
+        
+        $status = $row['status_221032'];
+        
+        $html .= '
+        <tr>
+            <td>' . $no++ . '</td>
+            <td>' . $row['kode_booking_221032'] . '</td>
+            <td>' . $row['nik_221032'] . '</td>
+            <td>' . $row['nama_221032'] . '</td>
+            <td>' . date('d/m/Y', strtotime($row['tanggal_booking_221032'])) . '</td>
+            <td>Rp ' . number_format($total_harga, 0, ',', '.') . '</td>
+            <td>' . $status . '</td>
+        </tr>';
+    }
+    
+    $html .= '
+    </table>
+    <p style="text-align:right;"><b>Total Keseluruhan: Rp ' . number_format($total_keseluruhan, 0, ',', '.') . '</b></p>
+    <p style="text-align:right;">Total Data: ' . ($no-1) . '</p>';
+    
+    // Output HTML ke PDF
+    $pdf->writeHTML($html, true, false, true, false, '');
+    
+    // Close and output PDF document
+    $pdf->Output('laporan_booking_' . date('YmdHis') . '.pdf', 'I');
+}
+
+// Update the function call where you generate the PDF
+if (isset($_GET['cetak'])) {
+    $result = mysqli_query($koneksi, $query);
+    $data = [];
+    while ($row = mysqli_fetch_assoc($result)) {
+        $data[] = $row;
+    }
+    
+    generatePDF($data, $filter, $koneksi, $start_date, $end_date);
+    exit;
+}
 ?>
 
 <!DOCTYPE html>
@@ -525,7 +671,7 @@ if ($_SESSION['status'] != 'login') {
             <!-- /.sidebar -->
         </aside>
 
-        <!-- Content Wrapper. Contains page content -->
+       <!-- Content Wrapper. Contains page content -->
         <div class="content-wrapper">
             <!-- Content Header (Page header) -->
             <div class="content-header">
@@ -533,11 +679,10 @@ if ($_SESSION['status'] != 'login') {
                     <div class="row mb-2">
                         <div class="col-sm-6">
                             <h1 class="m-0">Laporan</h1>
-                        </div><!-- /.col -->
-                    </div><!-- /.row -->
-                </div><!-- /.container-fluid -->
+                        </div>
+                    </div>
+                </div>
             </div>
-            <!-- /.content-header -->
 
             <!-- Main content -->
             <section class="content">
@@ -545,7 +690,48 @@ if ($_SESSION['status'] != 'login') {
                     <div class="row">
                         <div class="col-12">
                             <div class="card">
-                                <!-- /.card-header -->
+                                <div class="card-header">
+                                    <h3 class="card-title">Filter Laporan</h3>
+                                </div>
+                                <div class="card-body">
+                                    <form method="get" action="">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <div class="form-group">
+                                                    <label>Pilih Periode</label>
+                                                    <select name="filter" class="form-control" onchange="toggleCustomDate()">
+                                                        <option value="all" <?= $filter == 'all' ? 'selected' : '' ?>>Semua Data</option>
+                                                        <option value="week" <?= $filter == 'week' ? 'selected' : '' ?>>Minggu Ini</option>
+                                                        <option value="month" <?= $filter == 'month' ? 'selected' : '' ?>>Bulan Ini</option>
+                                                        <option value="year" <?= $filter == 'year' ? 'selected' : '' ?>>Tahun Ini</option>
+                                                        <option value="custom" <?= $filter == 'custom' ? 'selected' : '' ?>>Custom</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3" id="custom-date-start" style="<?= $filter != 'custom' ? 'display:none;' : '' ?>">
+                                                <div class="form-group">
+                                                    <label>Tanggal Mulai</label>
+                                                    <input type="date" name="start_date" class="form-control" value="<?= $start_date ?>">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3" id="custom-date-end" style="<?= $filter != 'custom' ? 'display:none;' : '' ?>">
+                                                <div class="form-group">
+                                                    <label>Tanggal Akhir</label>
+                                                    <input type="date" name="end_date" class="form-control" value="<?= $end_date ?>">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="form-group" style="margin-top: 32px;">
+                                                    <button type="submit" class="btn btn-primary">Filter</button>
+                                                    <button type="submit" name="cetak" value="1" class="btn btn-success">Cetak PDF</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            
+                            <div class="card">
                                 <div class="card-body">
                                     <table id="example1" class="table table-bordered table-striped">
                                         <thead>
@@ -555,24 +741,32 @@ if ($_SESSION['status'] != 'login') {
                                                 <th>NIK</th>
                                                 <th>Nama Pelanggan</th>
                                                 <th>Tanggal Booking</th>
+                                                <th>Total Harga</th>
                                                 <th>Status</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <?php
                                             $no = 1;
-                                            $tampil = mysqli_query($koneksi, "SELECT b.*, p.nama_221032 
-                                                                            FROM booking_221032 b
-                                                                            JOIN pelanggan_221032 p ON b.nik_221032 = p.nik_221032
-                                                                            ORDER BY b.tanggal_booking_221032 DESC");
+                                            $tampil = mysqli_query($koneksi, $query);
                                             while($data = mysqli_fetch_array($tampil)):
+                                                // Calculate total price for each booking
+                                                $total_harga = 0;
+                                                $query_layanan = mysqli_query($koneksi, "SELECT dl.*, l.harga_layanan_221032 
+                                                                                        FROM detail_layanan_221032 dl
+                                                                                        JOIN layanan_221032 l ON dl.kode_layanan_221032 = l.kode_layanan_221032
+                                                                                        WHERE dl.kode_booking_221032 = '".$data['kode_booking_221032']."'");
+                                                while($layanan = mysqli_fetch_array($query_layanan)) {
+                                                    $total_harga += $layanan['harga_layanan_221032'];
+                                                }
                                             ?>
                                             <tr>
                                                 <td><?= $no++ ?></td>
                                                 <td><?= $data['kode_booking_221032'] ?></td>
                                                 <td><?= $data['nik_221032'] ?></td>
                                                 <td><?= $data['nama_221032'] ?></td>
-                                                <td><?= $data['tanggal_booking_221032'] ?></td>
+                                                <td><?= date('d-m-Y', strtotime($data['tanggal_booking_221032'])) ?></td>
+                                                <td>Rp <?= number_format($total_harga, 0, ',', '.') ?></td>
                                                 <?php if ($data['status_221032'] == 'dikonfirmasi'): ?>
                                                 <td><span class="badge bg-success"><?= $data['status_221032'] ?></span></td>
                                                 <?php else: ?>
@@ -588,6 +782,7 @@ if ($_SESSION['status'] != 'login') {
                                                 <th>NIK</th>
                                                 <th>Nama Pelanggan</th>
                                                 <th>Tanggal Booking</th>
+                                                <th>Total Harga</th>
                                                 <th>Status</th>
                                             </tr>
                                         </tfoot>
@@ -687,6 +882,20 @@ if ($_SESSION['status'] != 'login') {
             });
         });
     </script>
+
+ <script>
+        function toggleCustomDate() {
+            var filter = document.getElementsByName('filter')[0].value;
+            if (filter == 'custom') {
+                document.getElementById('custom-date-start').style.display = 'block';
+                document.getElementById('custom-date-end').style.display = 'block';
+            } else {
+                document.getElementById('custom-date-start').style.display = 'none';
+                document.getElementById('custom-date-end').style.display = 'none';
+            }
+        }
+    </script>
+
 </body>
 
 </html>

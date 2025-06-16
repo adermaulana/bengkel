@@ -44,7 +44,7 @@
         if ($simpan) {
             echo "<script>
                     alert('Berhasil Registrasi!');
-                    document.location='index.php';
+                    document.location='login.php';
                 </script>";
         } else {
             echo "<script>
@@ -146,7 +146,7 @@
         </div>
     </form>
       <p class="mb-0">Sudah punya akun?
-        <a href="index.php" class="text-center">Login</a>
+        <a href="login.php" class="text-center">Login</a>
       </p>
     </div>
     <!-- /.card-body -->

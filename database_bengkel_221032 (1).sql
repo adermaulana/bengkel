@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 02, 2025 at 09:58 AM
+-- Generation Time: Jun 17, 2025 at 12:53 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -110,6 +110,18 @@ CREATE TABLE `layanan_221032` (
   `harga_layanan_221032` decimal(10,2) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `layanan_221032`
+--
+
+INSERT INTO `layanan_221032` (`kode_layanan_221032`, `nama_layanan_221032`, `harga_layanan_221032`) VALUES
+('001', 'Service Mesin', 500000.00),
+('002', 'Ganti Oli & Filter', 50000.00),
+('003', 'Service Rem', 70000.00),
+('004', 'Tune Up', 1000000.00),
+('005', 'Service AC Mobil', 2000000.00),
+('006', 'Konsultasi Mekanik', 50000.00);
+
 -- --------------------------------------------------------
 
 --
@@ -125,6 +137,13 @@ CREATE TABLE `pelanggan_221032` (
   `telepon_221032` varchar(15) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `pelanggan_221032`
+--
+
+INSERT INTO `pelanggan_221032` (`nik_221032`, `nama_221032`, `username_221032`, `password_221032`, `alamat_221032`, `telepon_221032`) VALUES
+('123465', 'tes', 'tes', '827ccb0eea8a706c4c34a16891f84e7b', 'tes', '2324');
+
 -- --------------------------------------------------------
 
 --
@@ -135,7 +154,8 @@ CREATE TABLE `pembayaran_221032` (
   `kode_pembayaran_221032` varchar(15) NOT NULL,
   `kode_booking_221032` varchar(15) DEFAULT NULL,
   `metode_pembayaran_221032` varchar(20) DEFAULT NULL,
-  `status_pembayaran_221032` varchar(20) DEFAULT NULL
+  `status_pembayaran_221032` varchar(20) DEFAULT NULL,
+  `bukti_pembayaran_221032` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -166,8 +186,8 @@ ALTER TABLE `booking_221032`
 --
 ALTER TABLE `detail_booking_bengkel_221032`
   ADD PRIMARY KEY (`id_bookingbengkel_221032`),
-  ADD KEY `kode_booking_221032` (`kode_booking_221032`),
-  ADD KEY `kode_bengkel_221032` (`kode_bengkel_221032`);
+  ADD KEY `detail_booking_bengkel_221032_ibfk_1` (`kode_booking_221032`),
+  ADD KEY `detail_booking_bengkel_221032_ibfk_2` (`kode_bengkel_221032`);
 
 --
 -- Indexes for table `detail_layanan_221032`
@@ -194,7 +214,7 @@ ALTER TABLE `pelanggan_221032`
 --
 ALTER TABLE `pembayaran_221032`
   ADD PRIMARY KEY (`kode_pembayaran_221032`),
-  ADD KEY `kode_booking_221032` (`kode_booking_221032`);
+  ADD KEY `pembayaran_221032_ibfk_1` (`kode_booking_221032`);
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -210,7 +230,7 @@ ALTER TABLE `detail_booking_bengkel_221032`
 -- AUTO_INCREMENT for table `detail_layanan_221032`
 --
 ALTER TABLE `detail_layanan_221032`
-  MODIFY `id_detaillayanan_221032` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id_detaillayanan_221032` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
 
 --
 -- Constraints for dumped tables
@@ -226,8 +246,8 @@ ALTER TABLE `booking_221032`
 -- Constraints for table `detail_booking_bengkel_221032`
 --
 ALTER TABLE `detail_booking_bengkel_221032`
-  ADD CONSTRAINT `detail_booking_bengkel_221032_ibfk_1` FOREIGN KEY (`kode_booking_221032`) REFERENCES `booking_221032` (`kode_booking_221032`),
-  ADD CONSTRAINT `detail_booking_bengkel_221032_ibfk_2` FOREIGN KEY (`kode_bengkel_221032`) REFERENCES `bengkel_221032` (`kode_bengkel_221032`);
+  ADD CONSTRAINT `detail_booking_bengkel_221032_ibfk_1` FOREIGN KEY (`kode_booking_221032`) REFERENCES `booking_221032` (`kode_booking_221032`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `detail_booking_bengkel_221032_ibfk_2` FOREIGN KEY (`kode_bengkel_221032`) REFERENCES `bengkel_221032` (`kode_bengkel_221032`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `detail_layanan_221032`
@@ -240,7 +260,7 @@ ALTER TABLE `detail_layanan_221032`
 -- Constraints for table `pembayaran_221032`
 --
 ALTER TABLE `pembayaran_221032`
-  ADD CONSTRAINT `pembayaran_221032_ibfk_1` FOREIGN KEY (`kode_booking_221032`) REFERENCES `booking_221032` (`kode_booking_221032`);
+  ADD CONSTRAINT `pembayaran_221032_ibfk_1` FOREIGN KEY (`kode_booking_221032`) REFERENCES `booking_221032` (`kode_booking_221032`) ON DELETE CASCADE ON UPDATE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
