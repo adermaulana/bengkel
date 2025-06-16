@@ -56,7 +56,7 @@ if (isset($_POST['booking'])) {
         $insert_booking = mysqli_query($koneksi, "INSERT INTO booking_221032 
                                 (kode_booking_221032, nik_221032, tanggal_booking_221032, status_221032) 
                                 VALUES 
-                                ('$kode_booking', '$nik', '$tanggal', 'pending')");
+                                ('$kode_booking', '$nik', '$tanggal', 'Pending')");
         
         if ($insert_booking) {
             // Insert each service in cart to detail_layanan

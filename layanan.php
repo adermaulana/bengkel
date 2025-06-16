@@ -16,9 +16,15 @@ if(isset($_SESSION['username_admin'])) {
       $isLoggedIn = false;
   }
 
-  $nik_pelanggan = isset($_SESSION['nik_pelanggan']);
+  $nik_pelanggan = $_SESSION['nik_pelanggan'] ?? null;
 
   if(isset($_GET['layanan'])) {
+
+    if(!isset($_SESSION['username_pelanggan']) || empty($nik_pelanggan)) {
+        echo "<script>alert('Silakan login sebagai pelanggan terlebih dahulu untuk memesan layanan!'); window.location='login.php';</script>";
+        exit();
+    }
+
     $kode_layanan = $_GET['layanan'];
     
     // Validasi apakah layanan exist
