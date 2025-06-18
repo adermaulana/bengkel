@@ -210,6 +210,12 @@ if (isset($_POST['simpan'])) {
                 </a>
           </li>
           <li class="nav-item">
+                <a href="laporan.php" class="nav-link">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Laporan</p>
+                </a>
+          </li>
+          <li class="nav-item">
             <a href="hapusSession.php" class="nav-link">
               <i class="nav-icon fas fa-columns"></i>
               <p>

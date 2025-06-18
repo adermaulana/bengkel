@@ -6,42 +6,80 @@ session_start();
 if ($_SESSION['status'] != 'login' || !isset($_SESSION['username_admin'])) {
     header('location:../pelanggan');
 }
+
 // Proses filter jika form disubmit
 $filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
 $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : '';
 $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : '';
 
-// Query dasar
-$query = "SELECT b.*, p.nama_221032 
-          FROM booking_221032 b
-          JOIN pelanggan_221032 p ON b.nik_221032 = p.nik_221032";
+// Buat kondisi WHERE berdasarkan filter untuk digunakan di semua query
+$where_condition = "";
+$filter_label = "";
 
-// Tambahkan kondisi berdasarkan filter
 switch ($filter) {
     case 'week':
-        $query .= " WHERE YEARWEEK(b.tanggal_booking_221032, 1) = YEARWEEK(CURDATE(), 1)";
+        $where_condition = " WHERE YEARWEEK(b.tanggal_booking_221032, 1) = YEARWEEK(CURDATE(), 1)";
+        $filter_label = "Minggu Ini";
         break;
     case 'month':
-        $query .= " WHERE MONTH(b.tanggal_booking_221032) = MONTH(CURDATE()) 
-                   AND YEAR(b.tanggal_booking_221032) = YEAR(CURDATE())";
+        $where_condition = " WHERE MONTH(b.tanggal_booking_221032) = MONTH(CURDATE()) 
+                           AND YEAR(b.tanggal_booking_221032) = YEAR(CURDATE())";
+        $filter_label = "Bulan Ini";
         break;
     case 'year':
-        $query .= " WHERE YEAR(b.tanggal_booking_221032) = YEAR(CURDATE())";
+        $where_condition = " WHERE YEAR(b.tanggal_booking_221032) = YEAR(CURDATE())";
+        $filter_label = "Tahun Ini";
         break;
     case 'custom':
         if (!empty($start_date) && !empty($end_date)) {
-            $query .= " WHERE b.tanggal_booking_221032 BETWEEN '$start_date' AND '$end_date'";
+            $where_condition = " WHERE b.tanggal_booking_221032 BETWEEN '$start_date' AND '$end_date'";
+            $filter_label = "Periode " . date('d/m/Y', strtotime($start_date)) . " - " . date('d/m/Y', strtotime($end_date));
+        } else {
+            $filter_label = "Semua Data";
         }
         break;
     default:
-        // Semua data
+        $filter_label = "Semua Data";
         break;
 }
 
+// Query untuk data booking (sama seperti sebelumnya)
+$query = "SELECT b.*, p.nama_221032 
+          FROM booking_221032 b
+          JOIN pelanggan_221032 p ON b.nik_221032 = p.nik_221032";
+$query .= $where_condition;
 $query .= " ORDER BY b.tanggal_booking_221032 DESC";
 
+// Query untuk menghitung pemasukan berdasarkan filter yang dipilih
+$income_query = "SELECT SUM(l.harga_layanan_221032) as total_income
+                FROM detail_layanan_221032 dl
+                JOIN layanan_221032 l ON dl.kode_layanan_221032 = l.kode_layanan_221032
+                JOIN booking_221032 b ON dl.kode_booking_221032 = b.kode_booking_221032";
+$income_query .= $where_condition;
+$income_query .= " AND b.status_221032 = 'dikonfirmasi'";
 
-function generatePDF($data, $filter, $koneksi, $start_date = null, $end_date = null) {
+$income_result = mysqli_query($koneksi, $income_query);
+$income_data = mysqli_fetch_assoc($income_result);
+
+// Query untuk layanan paling populer berdasarkan filter yang dipilih
+$popular_services_query = "SELECT l.kode_layanan_221032, l.nama_layanan_221032, COUNT(*) as total_orders, 
+                          SUM(l.harga_layanan_221032) as total_income
+                          FROM detail_layanan_221032 dl
+                          JOIN layanan_221032 l ON dl.kode_layanan_221032 = l.kode_layanan_221032
+                          JOIN booking_221032 b ON dl.kode_booking_221032 = b.kode_booking_221032";
+$popular_services_query .= $where_condition;
+$popular_services_query .= " AND b.status_221032 = 'dikonfirmasi'
+                           GROUP BY l.kode_layanan_221032, l.nama_layanan_221032
+                           ORDER BY total_orders DESC
+                           LIMIT 5";
+
+$popular_services_result = mysqli_query($koneksi, $popular_services_query);
+$popular_services = [];
+while ($row = mysqli_fetch_assoc($popular_services_result)) {
+    $popular_services[] = $row;
+}
+
+function generatePDF($data, $filter, $koneksi, $start_date = null, $end_date = null, $income_data, $popular_services, $filter_label) {
     require_once('../tcpdf/tcpdf.php');
     
     // Buat instance TCPDF
@@ -67,32 +105,51 @@ function generatePDF($data, $filter, $koneksi, $start_date = null, $end_date = n
     // Set judul laporan
     $title = 'LAPORAN DATA BOOKING BENGKEL';
     
-    // Tambahkan informasi periode berdasarkan filter
-    $period_info = '';
-    switch ($filter) {
-        case 'week':
-            $period_info = 'Periode: Minggu Ini';
-            break;
-        case 'month':
-            $period_info = 'Periode: Bulan Ini (' . date('F Y') . ')';
-            break;
-        case 'year':
-            $period_info = 'Periode: Tahun Ini (' . date('Y') . ')';
-            break;
-        case 'custom':
-            if ($start_date && $end_date) {
-                $period_info = 'Periode: ' . date('d/m/Y', strtotime($start_date)) . ' - ' . date('d/m/Y', strtotime($end_date));
-            }
-            break;
-        default:
-            $period_info = 'Semua Data';
-    }
-    
     // Konten HTML untuk PDF
     $html = '
     <h1 style="text-align:center;">' . $title . '</h1>
-    <p style="text-align:center;">' . $period_info . '</p>
-    <p style="text-align:center;">Dicetak pada: ' . date('d/m/Y H:i:s') . '</p>
+    <p style="text-align:center;">Periode: ' . $filter_label . '</p>
+    <p style="text-align:center;">Dicetak pada: ' . date('d/m/Y H:i:s') . '</p>';
+    
+    // Tambahkan ringkasan pemasukan berdasarkan filter
+    $html .= '
+    <h3 style="text-align:center;">Ringkasan Pemasukan - ' . $filter_label . '</h3>
+    <table border="1" cellpadding="4">
+        <tr>
+            <th width="70%"><b>Total Pemasukan (' . $filter_label . ')</b></th>
+            <td width="30%">Rp ' . number_format($income_data['total_income'], 0, ',', '.') . '</td>
+        </tr>
+    </table>';
+    
+    // Tambahkan layanan populer jika ada
+    if (!empty($popular_services)) {
+        $html .= '
+        <h3 style="text-align:center; margin-top:20px;">5 Layanan Paling Populer - ' . $filter_label . '</h3>
+        <table border="1" cellpadding="4">
+            <tr>
+                <th width="5%"><b>No</b></th>
+                <th width="45%"><b>Nama Layanan</b></th>
+                <th width="25%"><b>Jumlah Pesanan</b></th>
+                <th width="25%"><b>Total Pemasukan</b></th>
+            </tr>';
+        
+        $no = 1;
+        foreach ($popular_services as $service) {
+            $html .= '
+            <tr>
+                <td>' . $no++ . '</td>
+                <td>' . $service['nama_layanan_221032'] . '</td>
+                <td>' . $service['total_orders'] . '</td>
+                <td>Rp ' . number_format($service['total_income'], 0, ',', '.') . '</td>
+            </tr>';
+        }
+        
+        $html .= '
+        </table>';
+    }
+    
+    $html .= '
+    <h3 style="text-align:center; margin-top:20px;">Detail Booking</h3>
     <table border="1" cellpadding="4">
         <tr>
             <th width="5%"><b>No</b></th>
@@ -104,9 +161,9 @@ function generatePDF($data, $filter, $koneksi, $start_date = null, $end_date = n
             <th width="15%"><b>Status</b></th>
         </tr>';
     
-      $no = 1;
-      $total_keseluruhan = 0;
-      foreach ($data as $row) {
+    $no = 1;
+    $total_keseluruhan = 0;
+    foreach ($data as $row) {
         // Calculate total price for each booking in the PDF
         $total_harga = 0;
         $query_layanan = mysqli_query($koneksi, "SELECT dl.*, l.harga_layanan_221032 
@@ -152,7 +209,7 @@ if (isset($_GET['cetak'])) {
         $data[] = $row;
     }
     
-    generatePDF($data, $filter, $koneksi, $start_date, $end_date);
+    generatePDF($data, $filter, $koneksi, $start_date, $end_date, $income_data, $popular_services, $filter_label);
     exit;
 }
 ?>
@@ -315,355 +372,7 @@ if (isset($_GET['cetak'])) {
                                 </p>
                             </a>
                         </li>
-                        <!-- <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon far fa-envelope"></i>
-              <p>
-                Mailbox
-                <i class="fas fa-angle-left right"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="pages/mailbox/mailbox.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Inbox</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/mailbox/compose.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Compose</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/mailbox/read-mail.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Read</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-book"></i>
-              <p>
-                Pages
-                <i class="fas fa-angle-left right"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="pages/examples/invoice.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Invoice</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/profile.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Profile</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/e-commerce.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>E-commerce</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/projects.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Projects</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/project-add.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Project Add</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/project-edit.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Project Edit</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/project-detail.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Project Detail</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/contacts.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Contacts</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/faq.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>FAQ</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/contact-us.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Contact us</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon far fa-plus-square"></i>
-              <p>
-                Extras
-                <i class="fas fa-angle-left right"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="#" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>
-                    Login & Register v1
-                    <i class="fas fa-angle-left right"></i>
-                  </p>
-                </a>
-                <ul class="nav nav-treeview">
-                  <li class="nav-item">
-                    <a href="pages/examples/login.html" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Login v1</p>
-                    </a>
-                  </li>
-                  <li class="nav-item">
-                    <a href="pages/examples/register.html" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Register v1</p>
-                    </a>
-                  </li>
-                  <li class="nav-item">
-                    <a href="pages/examples/forgot-password.html" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Forgot Password v1</p>
-                    </a>
-                  </li>
-                  <li class="nav-item">
-                    <a href="pages/examples/recover-password.html" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Recover Password v1</p>
-                    </a>
-                  </li>
-                </ul>
-              </li>
-              <li class="nav-item">
-                <a href="#" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>
-                    Login & Register v2
-                    <i class="fas fa-angle-left right"></i>
-                  </p>
-                </a>
-                <ul class="nav nav-treeview">
-                  <li class="nav-item">
-                    <a href="pages/examples/login-v2.html" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Login v2</p>
-                    </a>
-                  </li>
-                  <li class="nav-item">
-                    <a href="pages/examples/register-v2.html" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Register v2</p>
-                    </a>
-                  </li>
-                  <li class="nav-item">
-                    <a href="pages/examples/forgot-password-v2.html" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Forgot Password v2</p>
-                    </a>
-                  </li>
-                  <li class="nav-item">
-                    <a href="pages/examples/recover-password-v2.html" class="nav-link">
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Recover Password v2</p>
-                    </a>
-                  </li>
-                </ul>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/lockscreen.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Lockscreen</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/legacy-user-menu.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Legacy User Menu</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/language-menu.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Language Menu</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/404.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Error 404</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/500.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Error 500</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/pace.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Pace</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/examples/blank.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Blank Page</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="starter.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Starter Page</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-search"></i>
-              <p>
-                Search
-                <i class="fas fa-angle-left right"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="pages/search/simple.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Simple Search</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="pages/search/enhanced.html" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Enhanced</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-header">MISCELLANEOUS</li>
-          <li class="nav-item">
-            <a href="iframe.html" class="nav-link">
-              <i class="nav-icon fas fa-ellipsis-h"></i>
-              <p>Tabbed IFrame Plugin</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="https://adminlte.io/docs/3.1/" class="nav-link">
-              <i class="nav-icon fas fa-file"></i>
-              <p>Documentation</p>
-            </a>
-          </li>
-          <li class="nav-header">MULTI LEVEL EXAMPLE</li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="fas fa-circle nav-icon"></i>
-              <p>Level 1</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon fas fa-circle"></i>
-              <p>
-                Level 1
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="#" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Level 2</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="#" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>
-                    Level 2
-                    <i class="right fas fa-angle-left"></i>
-                  </p>
-                </a>
-                <ul class="nav nav-treeview">
-                  <li class="nav-item">
-                    <a href="#" class="nav-link">
-                      <i class="far fa-dot-circle nav-icon"></i>
-                      <p>Level 3</p>
-                    </a>
-                  </li>
-                  <li class="nav-item">
-                    <a href="#" class="nav-link">
-                      <i class="far fa-dot-circle nav-icon"></i>
-                      <p>Level 3</p>
-                    </a>
-                  </li>
-                  <li class="nav-item">
-                    <a href="#" class="nav-link">
-                      <i class="far fa-dot-circle nav-icon"></i>
-                      <p>Level 3</p>
-                    </a>
-                  </li>
-                </ul>
-              </li>
-              <li class="nav-item">
-                <a href="#" class="nav-link">
-                  <i class="far fa-circle nav-icon"></i>
-                  <p>Level 2</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="fas fa-circle nav-icon"></i>
-              <p>Level 1</p>
-            </a>
-          </li>
-          <li class="nav-header">LABELS</li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon far fa-circle text-danger"></i>
-              <p class="text">Important</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon far fa-circle text-warning"></i>
-              <p>Warning</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="#" class="nav-link">
-              <i class="nav-icon far fa-circle text-info"></i>
-              <p>Informational</p>
-            </a>
-          </li> -->
+         
                     </ul>
                 </nav>
                 <!-- /.sidebar-menu -->
@@ -730,7 +439,41 @@ if (isset($_GET['cetak'])) {
                                     </form>
                                 </div>
                             </div>
-                            
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card card-primary">
+                                        <div class="card-header">
+                                            <h3 class="card-title">Pemasukan - <?= $filter_label ?></h3>
+                                        </div>
+                                        <div class="card-body">
+                                            <h4>Total Pemasukan: Rp <?= number_format($income_data['total_income'], 0, ',', '.') ?></h4>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card card-success">
+                                        <div class="card-header">
+                                            <h3 class="card-title">Layanan Paling Populer - <?= $filter_label ?></h3>
+                                        </div>
+                                        <div class="card-body">
+                                            <?php if (!empty($popular_services)): ?>
+                                                <ul class="list-group">
+                                                    <?php foreach ($popular_services as $service): ?>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <?= $service['nama_layanan_221032'] ?>
+                                                        <span class="badge badge-primary badge-pill"><?= $service['total_orders'] ?> pesanan</span>
+                                                    </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            <?php else: ?>
+                                                <p>Tidak ada data layanan untuk periode ini.</p>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="card">
                                 <div class="card-body">
                                     <table id="example1" class="table table-bordered table-striped">

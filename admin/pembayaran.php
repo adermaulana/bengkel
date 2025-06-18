@@ -621,9 +621,7 @@ if (isset($_GET['hal']) == 'hapus') {
                                                 <?php endif; ?>
                                                 <td>
                                                     <?php if ($data['status_221032'] == 'Pending' || $data['status_221032'] == 'pending'): ?>
-                                                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#uploadModal<?= $data['kode_booking_221032'] ?>">
-                                                        Upload Bukti
-                                                    </button>
+
                                                     <!-- Modal Upload Bukti Pembayaran -->
                                                     <div class="modal fade" id="uploadModal<?= $data['kode_booking_221032'] ?>" tabindex="-1" role="dialog" aria-labelledby="uploadModalLabel" aria-hidden="true">
                                                         <div class="modal-dialog" role="document">
